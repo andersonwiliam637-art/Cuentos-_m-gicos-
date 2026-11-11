@@ -1,55 +1,113 @@
 import { NextResponse } from 'next/server';
+import { z } from 'zod';
 import { createClient } from '@/lib/supabase/server';
 import { generateIllustration, generateIllustrationPrompt } from '@/lib/ai/illustration';
+import { moderateChildInput, moderateWithOpenAI } from '@/lib/safety/content';
+import { recordSafetyEvent } from '@/lib/safety/events';
 import { enforceUserRateLimit } from '@/lib/supabase/rate-limit';
+
+const requestSchema = z.object({
+  scene: z.string().trim().min(1).max(700),
+  characterId: z.string().uuid().optional(),
+}).strict();
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const supabase = await createClient();
+
   try {
-    const { data: authData } = await supabase.auth.getUser();
-    if (!authData.user) return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
-    if (!(await enforceUserRateLimit(supabase, authData.user.id, 'illustration_generation', 5, 60))) return NextResponse.json({ error: 'Demasiadas solicitudes. Espera un minuto.' }, { status: 429 });
+    const { data: authData, error: authError } = await supabase.auth.getUser();
+    if (authError || !authData.user) return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
+
+    if (!(await enforceUserRateLimit(supabase, 'illustration_generation'))) {
+      await recordSafetyEvent({ userId: authData.user.id, eventType: 'rate_limited', source: 'illustration', riskCode: 'illustration_generation_rate_limit' });
+      return NextResponse.json({ error: 'Demasiadas solicitudes. Espera un minuto.' }, { status: 429 });
+    }
+
+    let body: unknown;
+    try { body = await request.json(); } catch { return NextResponse.json({ error: 'JSON inválido' }, { status: 400 }); }
+    const parsed = requestSchema.safeParse(body);
+    if (!parsed.success) return NextResponse.json({ error: 'Datos inválidos' }, { status: 400 });
+
     const { id: storyId } = await params;
-    const body = await request.json();
-    const scene = typeof body.scene === 'string' ? body.scene.trim().slice(0, 700) : '';
-    if (!scene) return NextResponse.json({ error: 'Falta la escena' }, { status: 400 });
+    const { data: story, error: storyError } = await supabase
+      .from('stories')
+      .select('id,protagonist_name')
+      .eq('id', storyId)
+      .eq('user_id', authData.user.id)
+      .single();
 
-    const { data: story } = await supabase.from('stories').select('id,protagonist_name').eq('id', storyId).single();
-    if (!story) return NextResponse.json({ error: 'Cuento no encontrado' }, { status: 404 });
+    if (storyError || !story) return NextResponse.json({ error: 'Cuento no encontrado' }, { status: 404 });
 
-    const character = body.characterId
-      ? (await supabase.from('characters').select('id,name,description,visual_traits').eq('id', body.characterId).single()).data
+    const character = parsed.data.characterId
+      ? (await supabase.from('characters').select('id,name,description,visual_traits')
+          .eq('id', parsed.data.characterId).eq('user_id', authData.user.id).single()).data
       : null;
-    if (body.characterId && !character) return NextResponse.json({ error: 'Personaje no encontrado' }, { status: 404 });
+
+    if (parsed.data.characterId && !character) return NextResponse.json({ error: 'Personaje no encontrado' }, { status: 404 });
+
+    const moderationInput = [
+      parsed.data.scene,
+      character?.name ?? story.protagonist_name,
+      character?.description ?? '',
+      character?.visual_traits ?? '',
+    ];
+    const localModeration = moderateChildInput(moderationInput);
+    if (!localModeration.allowed) {
+      await recordSafetyEvent({ userId: authData.user.id, eventType: 'input_blocked', source: 'illustration', riskCode: localModeration.riskCode });
+      return NextResponse.json({ error: 'Esa escena no está disponible para Cuentos Mágicos.' }, { status: 422 });
+    }
+
+    let providerModeration;
+    try { providerModeration = await moderateWithOpenAI(moderationInput.join('\n')); }
+    catch { return NextResponse.json({ error: 'La comprobación de seguridad no está disponible. Inténtalo de nuevo.' }, { status: 503 }); }
+    if (!providerModeration.allowed) {
+      await recordSafetyEvent({ userId: authData.user.id, eventType: 'input_blocked', source: 'illustration', riskCode: providerModeration.riskCode });
+      return NextResponse.json({ error: 'Esa escena no está disponible para Cuentos Mágicos.' }, { status: 422 });
+    }
 
     const prompt = await generateIllustrationPrompt({
       protagonistName: character?.name || story.protagonist_name,
       characterDescription: character?.description || 'friendly child story protagonist',
       visualTraits: character?.visual_traits || 'consistent colorful storybook appearance',
-      scene,
+      scene: parsed.data.scene,
     });
 
-    const { data: lastIllustration } = await supabase.from('illustrations').select('position').eq('story_id', storyId).order('position', { ascending: false }).limit(1).maybeSingle();
-    const position = (lastIllustration?.position ?? -1) + 1;
-    const { data: pending, error: pendingError } = await supabase.from('illustrations').insert({
-      story_id: storyId, character_id: character?.id ?? null, prompt, position, generation_status: 'processing'
-    }).select('id').single();
-    if (pendingError) return NextResponse.json({ error: 'No se pudo iniciar la ilustración' }, { status: 500 });
+    // The DB allocates both the placeholder and its position in one transaction.
+    const { data: reservation, error: reservationError } = await supabase.rpc('reserve_illustration', {
+      p_story_id: storyId,
+      p_character_id: character?.id ?? null,
+      p_prompt: prompt,
+    });
+    const pending = Array.isArray(reservation) ? reservation[0] : reservation;
+    if (reservationError || !pending?.illustration_id) {
+      console.error('illustration_reservation_failed', { code: reservationError?.code });
+      return NextResponse.json({ error: 'No se pudo iniciar la ilustración' }, { status: 500 });
+    }
 
+    const illustrationId = pending.illustration_id as string;
     try {
       const image = await generateIllustration(prompt);
-      const path = `${authData.user.id}/${storyId}/${pending.id}.png`;
-      const { error: uploadError } = await supabase.storage.from('story-art').upload(path, image, { contentType: 'image/png', upsert: true });
+      const path = `${authData.user.id}/${storyId}/${illustrationId}.png`;
+      const { error: uploadError } = await supabase.storage.from('story-art')
+        .upload(path, image, { contentType: 'image/png', upsert: true });
       if (uploadError) throw uploadError;
-      const { data: updated, error: updateError } = await supabase.from('illustrations').update({ image_url: path, generation_status: 'completed' }).eq('id', pending.id).select('*').single();
+
+      const { data: updated, error: updateError } = await supabase.from('illustrations')
+        .update({ image_url: path, generation_status: 'completed' })
+        .eq('id', illustrationId)
+        .select('*')
+        .single();
       if (updateError) throw updateError;
       return NextResponse.json({ illustration: updated });
     } catch (error) {
-      await supabase.from('illustrations').update({ generation_status: 'failed', error_message: 'image_generation_failed' }).eq('id', pending.id);
+      const { error: markFailedError } = await supabase.from('illustrations')
+        .update({ generation_status: 'failed', error_message: 'image_generation_failed' })
+        .eq('id', illustrationId);
+      if (markFailedError) console.error('illustration_failure_status_write_failed', { code: markFailedError.code });
       throw error;
     }
   } catch (error) {
-    console.error('illustration_generation_error', error);
+    console.error('illustration_generation_error', error instanceof Error ? error.name : 'unknown');
     return NextResponse.json({ error: 'No se pudo generar la ilustración' }, { status: 500 });
   }
 }

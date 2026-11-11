@@ -13,10 +13,10 @@
   "dependencies": {
     "@supabase/ssr": "0.7.0",
     "@supabase/supabase-js": "2.57.4",
-    "next": "15.5.6",
+    "next": "15.5.28",
     "openai": "5.20.0",
-    "react": "19.1.1",
-    "react-dom": "19.1.1",
+    "react": "19.1.7",
+    "react-dom": "19.1.7",
     "svix": "1.76.1",
     "zod": "3.25.76"
   },
@@ -25,7 +25,7 @@
     "@types/react": "19.1.13",
     "@types/react-dom": "19.1.9",
     "eslint": "8.57.1",
-    "eslint-config-next": "15.5.6",
+    "eslint-config-next": "15.5.28",
     "typescript": "5.9.2"
   }
 }
