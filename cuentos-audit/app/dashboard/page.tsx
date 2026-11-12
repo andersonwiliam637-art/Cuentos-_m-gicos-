@@ -10,7 +10,7 @@ type Story = {
   protagonist_name: string;
   age_range: string | null;
   moral_lesson: string | null;
-  story_content: string;
+  story_content?: string;
   created_at: string;
 };
 type Activity = {
@@ -42,6 +42,7 @@ export default function Dashboard() {
   const [storyLoading, setStoryLoading] = useState(false);
   const [activityLoading, setActivityLoading] = useState(false);
   const [selectedStory, setSelectedStory] = useState<Story | null>(null);
+  const [storyOpening, setStoryOpening] = useState(false);
   const [message, setMessage] = useState('');
   const [answer, setAnswer] = useState<Record<string, string>>({});
   const [storyForm, setStoryForm] = useState({ protagonistName: '', age: 8, interests: '', moralLesson: 'La importancia de ayudar a los demás' });
@@ -85,6 +86,24 @@ export default function Dashboard() {
   }
 
   useEffect(() => { void loadData(); }, []);
+
+  async function openStory(story: Story) {
+    if (story.story_content) {
+      setSelectedStory(story);
+      return;
+    }
+    setStoryOpening(true);
+    try {
+      const response = await fetch(`/api/stories/${story.id}`, { cache: 'no-store' });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'No se pudo abrir el cuento.');
+      setSelectedStory(data.story);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'No se pudo abrir el cuento.');
+    } finally {
+      setStoryOpening(false);
+    }
+  }
 
   async function createStory(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -264,11 +283,11 @@ export default function Dashboard() {
               <div className="panel-heading"><div><h2>La biblioteca familiar</h2><p>Las historias creadas para volver a leerlas cuando quieran.</p></div><span className="panel-icon">🌙</span></div>
               {stories.length === 0 ? <div className="empty-state"><strong>Tu primer cuento está por nacer.</strong>Completa el formulario de creación y aparecerá aquí como parte de tu colección.</div> : (
                 <div className="story-grid">
-                  {stories.map((story, index) => <button type="button" className="story-tile" key={story.id} onClick={() => setSelectedStory(story)}>
+                  {stories.map((story, index) => <button type="button" className="story-tile" key={story.id} onClick={() => void openStory(story)}>
                     <span className="story-symbol">{['✦', '☾', '✺'][index % 3]}</span>
                     <small>CUENTO PERSONALIZADO · {story.age_range ?? 'Aventura'}</small>
                     <strong>{story.title}</strong>
-                    <span>Protagonista: {story.protagonist_name} · Abrir historia ↗</span>
+                    <span>Protagonista: {story.protagonist_name} · {storyOpening ? 'Abriendo…' : 'Abrir historia ↗'}</span>
                   </button>)}
                 </div>
               )}
@@ -331,7 +350,7 @@ export default function Dashboard() {
           <button className="reader-close" type="button" onClick={() => setSelectedStory(null)} aria-label="Cerrar">×</button>
           <div className="eyebrow">BIBLIOTECA MÁGICA · {selectedStory.protagonist_name}</div>
           <h2>{selectedStory.title}</h2>
-          <p>{selectedStory.story_content}</p>
+          <p>{selectedStory.story_content ?? 'No se pudo cargar el contenido completo de esta historia.'}</p>
           {selectedStory.moral_lesson && <div className="status-message"><strong>Aprendizaje:</strong> {selectedStory.moral_lesson}</div>}
         </article>
       </div>}
