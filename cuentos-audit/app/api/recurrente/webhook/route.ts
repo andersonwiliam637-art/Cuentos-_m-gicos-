@@ -48,6 +48,31 @@ type RecurrenteEvent = {
   details?: Record<string, unknown>;
 };
 
+type PaidPlanCode = 'basic' | 'family_premium' | 'plus_family';
+
+function normalizePaidPlan(productCode: string): PaidPlanCode | null {
+  if (productCode === 'basic') return 'basic';
+  if (productCode === 'family_premium' || productCode === 'family') return 'family_premium';
+  if (productCode === 'plus_family' || productCode === 'premium') return 'plus_family';
+  return null;
+}
+
+function legacyPlanType(planCode: PaidPlanCode | 'free'): 'free' | 'family' | 'premium' {
+  if (planCode === 'free') return 'free';
+  return planCode === 'plus_family' ? 'premium' : 'family';
+}
+
+async function setUserPlan(
+  admin: ReturnType<typeof createAdminClient>,
+  userId: string,
+  planCode: PaidPlanCode | 'free',
+) {
+  const { error } = await admin.from('profiles')
+    .update({ plan_code: planCode, plan_type: legacyPlanType(planCode) })
+    .eq('id', userId);
+  if (error) throw error;
+}
+
 async function refreshPlanFromPaidOrders(admin: ReturnType<typeof createAdminClient>, userId: string) {
   const { data: orders, error } = await admin
     .from('payment_orders')
@@ -57,18 +82,16 @@ async function refreshPlanFromPaidOrders(admin: ReturnType<typeof createAdminCli
 
   if (error) throw error;
 
-  const plan = orders?.some((order) => order.product_code === 'premium')
-    ? 'premium'
-    : orders?.some((order) => order.product_code === 'family')
-      ? 'family'
-      : 'free';
+  const codes = (orders ?? []).map((order) => normalizePaidPlan(order.product_code)).filter(Boolean);
+  const plan: PaidPlanCode | 'free' = codes.includes('plus_family')
+    ? 'plus_family'
+    : codes.includes('family_premium')
+      ? 'family_premium'
+      : codes.includes('basic')
+        ? 'basic'
+        : 'free';
 
-  const { error: profileError } = await admin
-    .from('profiles')
-    .update({ plan_type: plan })
-    .eq('id', userId);
-
-  if (profileError) throw profileError;
+  await setUserPlan(admin, userId, plan);
 }
 
 export async function POST(request: Request) {
@@ -154,19 +177,8 @@ export async function POST(request: Request) {
 
         if (paidError) throw paidError;
 
-        const plan = order.product_code === 'premium'
-          ? 'premium'
-          : order.product_code === 'family'
-            ? 'family'
-            : null;
-
-        if (plan) {
-          const { error: profileError } = await admin
-            .from('profiles')
-            .update({ plan_type: plan })
-            .eq('id', order.user_id);
-          if (profileError) throw profileError;
-        }
+        const plan = normalizePaidPlan(order.product_code);
+        if (plan) await setUserPlan(admin, order.user_id, plan);
       }
     }
 
@@ -183,7 +195,7 @@ export async function POST(request: Request) {
     if (['subscription.pause', 'subscription.cancel', 'subscription.past_due'].includes(event.event_type) && event.subscription?.id) {
       const { data: order, error: lookupError } = await admin
         .from('payment_orders')
-        .select('user_id')
+        .select('id,user_id')
         .eq('provider', 'recurrente')
         .eq('external_subscription_id', event.subscription.id)
         .maybeSingle();
@@ -191,18 +203,18 @@ export async function POST(request: Request) {
       if (lookupError) throw lookupError;
 
       if (order) {
-        const { error: planError } = await admin
-          .from('profiles')
-          .update({ plan_type: 'free' })
-          .eq('id', order.user_id);
-        if (planError) throw planError;
+        const { error: orderStatusError } = await admin.from('payment_orders')
+          .update({ status: 'canceled', updated_at: new Date().toISOString() })
+          .eq('id', order.id);
+        if (orderStatusError) throw orderStatusError;
+        await setUserPlan(admin, order.user_id, 'free');
       }
     }
 
     if (['subscription.unpause', 'subscription.reactivate'].includes(event.event_type) && event.subscription?.id) {
       const { data: order, error: lookupError } = await admin
         .from('payment_orders')
-        .select('user_id,product_code')
+        .select('id,user_id,product_code')
         .eq('provider', 'recurrente')
         .eq('external_subscription_id', event.subscription.id)
         .maybeSingle();
@@ -210,19 +222,12 @@ export async function POST(request: Request) {
       if (lookupError) throw lookupError;
 
       if (order) {
-        const plan = order.product_code === 'premium'
-          ? 'premium'
-          : order.product_code === 'family'
-            ? 'family'
-            : null;
-
-        if (plan) {
-          const { error: planError } = await admin
-            .from('profiles')
-            .update({ plan_type: plan })
-            .eq('id', order.user_id);
-          if (planError) throw planError;
-        }
+        const { error: orderStatusError } = await admin.from('payment_orders')
+          .update({ status: 'paid', updated_at: new Date().toISOString() })
+          .eq('id', order.id);
+        if (orderStatusError) throw orderStatusError;
+        const plan = normalizePaidPlan(order.product_code);
+        if (plan) await setUserPlan(admin, order.user_id, plan);
       }
     }
 
