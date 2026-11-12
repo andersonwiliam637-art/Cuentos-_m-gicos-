@@ -178,7 +178,7 @@ export async function POST(request: Request) {
         if (paidError) throw paidError;
 
         const plan = normalizePaidPlan(order.product_code);
-        if (plan) await setUserPlan(admin, order.user_id, plan);
+        if (plan) await refreshPlanFromPaidOrders(admin, order.user_id);
       }
     }
 
@@ -233,7 +233,7 @@ export async function POST(request: Request) {
           .update({ status: 'canceled', updated_at: new Date().toISOString() })
           .eq('id', order.id);
         if (orderStatusError) throw orderStatusError;
-        await setUserPlan(admin, order.user_id, 'free');
+        await refreshPlanFromPaidOrders(admin, order.user_id);
       }
     }
 
@@ -253,7 +253,7 @@ export async function POST(request: Request) {
           .eq('id', order.id);
         if (orderStatusError) throw orderStatusError;
         const plan = normalizePaidPlan(order.product_code);
-        if (plan) await setUserPlan(admin, order.user_id, plan);
+        if (plan) await refreshPlanFromPaidOrders(admin, order.user_id);
       }
     }
 
