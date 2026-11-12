@@ -10,7 +10,7 @@ Incluye correcciones de seguridad estática, RPCs con permisos reforzados, rate 
 
 - Node.js 20.11 o posterior.
 - Proyecto Supabase dedicado a staging y otro para producción.
-- Cuenta Recurrente verificada, dos productos recurrentes configurados (Family y Premium), llave de API y signing secret de webhook.
+- Cuenta Recurrente verificada, tres productos de suscripción mensual configurados (Básico, Familiar Premium y Plus Familiar), llave de API y signing secret de webhook.
 - API key de OpenAI y límites de gasto configurados.
 - URL HTTPS pública.
 
