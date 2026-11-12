@@ -98,6 +98,20 @@ export async function POST(request: Request) {
       if (data.age !== age) return NextResponse.json({ error: 'La edad no coincide con el perfil' }, { status: 400 });
     }
 
+    const { data: monthlyReservation, error: monthlyReservationError } = await supabase.rpc('reserve_monthly_ai_usage', { p_bucket: 'activity' });
+    const monthlyQuota = Array.isArray(monthlyReservation) ? monthlyReservation[0] : monthlyReservation;
+    if (monthlyReservationError) {
+      console.error('activity_monthly_quota_reservation_failed', { code: monthlyReservationError.code });
+      return NextResponse.json({ error: 'No se pudo validar el cupo mensual. Inténtalo de nuevo.' }, { status: 503 });
+    }
+    if (!monthlyQuota?.allowed) {
+      return NextResponse.json({
+        error: 'Alcanzaste el límite mensual de actividades de tu plan.',
+        used: monthlyQuota?.used,
+        limit: monthlyQuota?.limit_count,
+      }, { status: 403 });
+    }
+
     const response = await getOpenAI().responses.create({
       model: process.env.OPENAI_TEXT_MODEL || 'gpt-6-luna',
       instructions: 'Eres un docente de primaria que diseña actividades seguras, inclusivas y apropiadas para la edad. No solicites datos personales.',
