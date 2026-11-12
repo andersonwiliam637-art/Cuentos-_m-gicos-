@@ -192,7 +192,33 @@ export async function POST(request: Request) {
       if (subscriptionLinkError) throw subscriptionLinkError;
     }
 
-    if (['subscription.pause', 'subscription.cancel', 'subscription.past_due'].includes(event.event_type) && event.subscription?.id) {
+    if (event.event_type === 'subscription.past_due' && event.subscription?.id) {
+      const { data: order, error: lookupError } = await admin
+        .from('payment_orders')
+        .select('id,metadata')
+        .eq('provider', 'recurrente')
+        .eq('external_subscription_id', event.subscription.id)
+        .maybeSingle();
+
+      if (lookupError) throw lookupError;
+
+      if (order) {
+        const metadata = order.metadata && typeof order.metadata === 'object' && !Array.isArray(order.metadata)
+          ? order.metadata as Record<string, unknown>
+          : {};
+        const { error: statusError } = await admin.from('payment_orders')
+          .update({
+            metadata: { ...metadata, subscription_state: 'past_due', past_due_at: new Date().toISOString() },
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', order.id);
+        if (statusError) throw statusError;
+        // Recurrente retries subscription charges daily up to 15 attempts.
+        // Preserve paid access during retries; subscription.cancel is the terminal failure event.
+      }
+    }
+
+    if (['subscription.pause', 'subscription.cancel'].includes(event.event_type) && event.subscription?.id) {
       const { data: order, error: lookupError } = await admin
         .from('payment_orders')
         .select('id,user_id')
