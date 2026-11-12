@@ -1,43 +1,7 @@
 import Link from 'next/link';
+import { PAID_PLANS } from '@/lib/billing/plans';
 
-const plans = [
-  {
-    code: 'basic',
-    name: 'Mágico Básico',
-    price: '99',
-    audience: 'Para comenzar a descubrir historias',
-    profiles: '1 perfil infantil',
-    stories: '8 cuentos personalizados al mes',
-    activities: '12 actividades educativas al mes',
-    illustrations: '3 ilustraciones con IA al mes',
-    featured: false,
-    features: ['Biblioteca privada de cuentos', 'Comprensión lectora y aprendizaje', 'Progreso básico del perfil', 'Contenido adaptado a la edad'],
-  },
-  {
-    code: 'family_premium',
-    name: 'Familiar Premium',
-    price: '199',
-    audience: 'Para compartir el aprendizaje en familia',
-    profiles: 'Hasta 3 perfiles infantiles',
-    stories: '20 cuentos personalizados al mes',
-    activities: '30 actividades educativas al mes',
-    illustrations: '10 ilustraciones con IA al mes',
-    featured: true,
-    features: ['Todo lo incluido en Básico', 'Seguimiento del progreso familiar', 'Personajes y aventuras personalizadas', 'Más espacio para crear y aprender'],
-  },
-  {
-    code: 'plus_family',
-    name: 'Plus Familiar',
-    price: '349',
-    audience: 'La experiencia más completa de Cuentos Mágicos',
-    profiles: 'Hasta 5 perfiles infantiles',
-    stories: '40 cuentos personalizados al mes',
-    activities: '60 actividades educativas al mes',
-    illustrations: '20 ilustraciones con IA al mes',
-    featured: false,
-    features: ['Acceso a todas las herramientas disponibles', 'Biblioteca y actividades completas', 'Experiencias creativas para toda la familia', 'Cupos mensuales ampliados de IA'],
-  },
-];
+const plans = PAID_PLANS;
 
 const experiences = [
   { icon: '📖', title: 'Cuentos que nacen de su imaginación', text: 'Historias personalizadas con protagonistas, intereses y aprendizajes elegidos por la familia.' },
@@ -143,9 +107,9 @@ export default function Home() {
                 <strong>Incluye cada mes</strong>
                 <ul>
                   <li>{plan.profiles}</li>
-                  <li>{plan.stories}</li>
-                  <li>{plan.activities}</li>
-                  <li>{plan.illustrations}</li>
+                  <li>{plan.storiesLabel}</li>
+                  <li>{plan.activitiesLabel}</li>
+                  <li>{plan.illustrationsLabel}</li>
                 </ul>
               </div>
               <div className="plan-divider" />
