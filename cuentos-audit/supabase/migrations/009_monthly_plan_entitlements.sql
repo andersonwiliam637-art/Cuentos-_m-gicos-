@@ -184,6 +184,10 @@ declare
   v_limit integer;
   v_count integer;
 begin
+  if auth.uid() is not null and auth.uid() <> new.user_id then
+    raise exception 'not_authorized' using errcode = '42501';
+  end if;
+
   select plan_code into v_plan
   from public.profiles
   where id = new.user_id
@@ -218,4 +222,8 @@ drop trigger if exists learner_profile_plan_limit on public.learner_profiles;
 create trigger learner_profile_plan_limit
 before insert on public.learner_profiles
 for each row execute function public.enforce_learner_profile_limit();
+
+-- Trigger execution does not require exposing the SECURITY DEFINER trigger
+-- function as a callable RPC endpoint.
+revoke all on function public.enforce_learner_profile_limit() from public, anon, authenticated;
 
