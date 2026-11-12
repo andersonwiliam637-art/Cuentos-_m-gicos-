@@ -39,7 +39,7 @@ Requisitos:
 export async function generateStory(input: CreateStoryInput) {
   const openai = getOpenAI();
   const response = await openai.responses.create({
-    model: process.env.OPENAI_TEXT_MODEL || 'gpt-5-mini',
+    model: process.env.OPENAI_TEXT_MODEL || 'gpt-6-luna',
     instructions: 'Eres un autor infantil especializado en aprendizaje seguro y apropiado para la edad.',
     input: buildPrompt(input),
     text: {
