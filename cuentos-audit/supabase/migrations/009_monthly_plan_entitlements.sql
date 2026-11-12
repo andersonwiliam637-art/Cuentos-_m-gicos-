@@ -48,7 +48,7 @@ as $$
 declare
   v_user_id uuid := auth.uid();
   v_plan text;
-  v_month date := date_trunc('month', now())::date;
+  v_month date := date_trunc('month', now() at time zone 'America/Guatemala')::date;
   v_limit integer;
   v_used integer;
 begin
