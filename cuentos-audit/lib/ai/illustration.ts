@@ -20,7 +20,7 @@ export async function generateIllustration(prompt: string) {
   if (!process.env.OPENAI_API_KEY) throw new Error('OPENAI_API_KEY_MISSING');
   const openai = getOpenAI();
   const result = await openai.images.generate({
-    model: process.env.OPENAI_IMAGE_MODEL || 'gpt-image-1',
+    model: process.env.OPENAI_IMAGE_MODEL || 'gpt-image-2',
     prompt,
     size: '1024x1024',
   });
