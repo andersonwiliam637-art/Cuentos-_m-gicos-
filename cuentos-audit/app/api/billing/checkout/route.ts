@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 
-const schema = z.object({ plan: z.enum(['family', 'premium']) }).strict();
+const schema = z.object({ plan: z.enum(['basic', 'family_premium', 'plus_family']) }).strict();
 const API_BASE = 'https://app.recurrente.com/api';
 
 export async function POST(request: Request) {
@@ -18,7 +18,12 @@ export async function POST(request: Request) {
   try { body = await request.json(); } catch { return NextResponse.json({ error: 'JSON inválido' }, { status: 400 }); }
   const parsed = schema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: 'Plan inválido' }, { status: 400 });
-  const productId = parsed.data.plan === 'family' ? process.env.RECURRENTE_FAMILY_PRODUCT_ID : process.env.RECURRENTE_PREMIUM_PRODUCT_ID;
+  const productIds = {
+    basic: process.env.RECURRENTE_BASIC_PRODUCT_ID,
+    family_premium: process.env.RECURRENTE_FAMILY_PREMIUM_PRODUCT_ID,
+    plus_family: process.env.RECURRENTE_PLUS_FAMILY_PRODUCT_ID,
+  } as const;
+  const productId = productIds[parsed.data.plan];
   if (!productId) return NextResponse.json({ error: 'Producto de suscripción no configurado en Recurrente' }, { status: 503 });
 
   const admin = createAdminClient();
