@@ -99,7 +99,7 @@ export async function POST(request: Request) {
     }
 
     const response = await getOpenAI().responses.create({
-      model: process.env.OPENAI_TEXT_MODEL || 'gpt-5-mini',
+      model: process.env.OPENAI_TEXT_MODEL || 'gpt-6-luna',
       instructions: 'Eres un docente de primaria que diseña actividades seguras, inclusivas y apropiadas para la edad. No solicites datos personales.',
       input: `Create one safe educational activity for a child age ${age}. Type: ${type}. Topic: ${topic}. Never request personal information. No frightening, sexual, violent, discriminatory or manipulative content. Return JSON only with title,instructions,question,options,answerKey,explanation.`,
       text: { format: { type: 'json_object' } },
