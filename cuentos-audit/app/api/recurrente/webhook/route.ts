@@ -242,7 +242,7 @@ export async function POST(request: Request) {
 
       if (refundError) throw refundError;
       if (refundedOrder?.user_id) {
-        // Keep access if another paid order still grants a Family/Premium plan.
+        // Keep access if another paid order still grants a monthly plan.
         await refreshPlanFromPaidOrders(admin, refundedOrder.user_id);
       }
     }
