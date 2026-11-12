@@ -30,14 +30,14 @@ Configura `.env.local` con valores reales; nunca commits secretos.
 
 Proyecto Supabase identificado por el usuario: `uoiugltuadzfntzscihh` (`https://uoiugltuadzfntzscihh.supabase.co`). La URL no concede acceso administrativo y no confirma el estado de la base. Antes de migrar, ejecuta `supabase/PRODUCTION_PREFLIGHT.sql` en SQL Editor y revisa las tablas, RLS, políticas y RPCs. No ejecutes migraciones a ciegas sobre una base con datos.
 
-1. En un proyecto de **staging**, aplicar en orden `supabase/migrations/001_initial_schema.sql` a `007_production_hardening_recurrente.sql`.
+1. En un proyecto de **staging**, aplicar en orden `supabase/migrations/001_initial_schema.sql` a `009_monthly_plan_entitlements.sql`.
 2. Ejecutar pruebas de aislamiento entre dos usuarios y pruebas de cuota/rate limit.
 3. Verificar políticas RLS en tablas de cuentos, personajes, actividades, ilustraciones, perfiles y billing.
 4. Aplicar la misma secuencia a producción únicamente después de validar staging y hacer backup.
 
 ## Recurrente
 
-Configura `PAYMENT_PROVIDER=recurrente`, `RECURRENTE_SECRET_KEY`, `RECURRENTE_WEBHOOK_SECRET`, `RECURRENTE_FAMILY_PRODUCT_ID`, `RECURRENTE_PREMIUM_PRODUCT_ID` y `NEXT_PUBLIC_APP_URL`.
+Configura `PAYMENT_PROVIDER=recurrente`, `RECURRENTE_SECRET_KEY`, `RECURRENTE_WEBHOOK_SECRET`, `RECURRENTE_BASIC_PRODUCT_ID`, `RECURRENTE_FAMILY_PREMIUM_PRODUCT_ID`, `RECURRENTE_PLUS_FAMILY_PRODUCT_ID` y `NEXT_PUBLIC_APP_URL`.
 
 Registra en Recurrente el webhook `https://TU-DOMINIO/api/recurrente/webhook` y guarda su signing secret como `RECURRENTE_WEBHOOK_SECRET`. Primero usar Sandbox. Confirma los payloads de checkout y de suscripción en la cuenta real antes de habilitar cobros live.
 
@@ -57,3 +57,11 @@ El endpoint de portal de facturación devuelve 501 deliberadamente: no debe apar
 ## Seguridad infantil
 
 La moderación basada en patrones es solo una defensa básica, no una garantía de seguridad. Antes de abrir a menores, completar evaluación adversarial, revisar privacidad y retención de datos, y obtener revisión legal aplicable.
+
+## Planes mensuales y cupos de IA
+
+- Mágico Básico: Q99/mes, 1 perfil, 8 cuentos, 12 actividades y 3 ilustraciones al mes.
+- Familiar Premium: Q199/mes, hasta 3 perfiles, 20 cuentos, 30 actividades y 10 ilustraciones al mes.
+- Plus Familiar: Q349/mes, hasta 5 perfiles, 40 cuentos, 60 actividades y 20 ilustraciones al mes.
+
+El plan Plus Familiar incluye acceso a todas las herramientas disponibles, pero no ofrece generación ilimitada. La migración 009 incorpora reservas mensuales atómicas para controlar las generaciones desde PostgreSQL y el límite de perfiles infantiles. Los cupos se reinician al comenzar cada mes calendario y no se acumulan.
