@@ -1,7 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { FormEvent, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
+import type { FormEvent } from 'react';
 
 type Story = {
   id: string;
@@ -125,7 +126,6 @@ export default function Dashboard() {
         body: JSON.stringify({
           age: activityForm.age,
           type: activityForm.type,
-          learnerId: learners[0]?.id,
           topic: activityForm.topic || 'aprendizaje divertido',
         }),
       });
