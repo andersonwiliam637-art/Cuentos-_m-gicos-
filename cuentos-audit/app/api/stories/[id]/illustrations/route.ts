@@ -65,6 +65,20 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: 'Esa escena no está disponible para Cuentos Mágicos.' }, { status: 422 });
     }
 
+    const { data: monthlyReservation, error: monthlyReservationError } = await supabase.rpc('reserve_monthly_ai_usage', { p_bucket: 'illustration' });
+    const monthlyQuota = Array.isArray(monthlyReservation) ? monthlyReservation[0] : monthlyReservation;
+    if (monthlyReservationError) {
+      console.error('illustration_monthly_quota_reservation_failed', { code: monthlyReservationError.code });
+      return NextResponse.json({ error: 'No se pudo validar el cupo mensual. Inténtalo de nuevo.' }, { status: 503 });
+    }
+    if (!monthlyQuota?.allowed) {
+      return NextResponse.json({
+        error: 'Alcanzaste el límite mensual de ilustraciones de tu plan.',
+        used: monthlyQuota?.used,
+        limit: monthlyQuota?.limit_count,
+      }, { status: 403 });
+    }
+
     const prompt = await generateIllustrationPrompt({
       protagonistName: character?.name || story.protagonist_name,
       characterDescription: character?.description || 'friendly child story protagonist',
